@@ -14,6 +14,14 @@ NOTE:
 	the .mp3 files in Files/ to .wav files before calling them
 
 	Also, try running twice, sometimes an error occurs the first time
+
+
+GOALS:
+1.find out if you can make music speed up 
+2.adapt code
+
+3.Add coins
+
 '''
 
 import sys
@@ -77,14 +85,6 @@ def callBack(_in_data, _frame_count, _time_info, _status):
 	if read < hopS:
 		return (audiobuf, pyaudio.paComplete)
 	return (audiobuf, pyaudio.paContinue)
-
-p = pyaudio.PyAudio()
-stream = p.open(format=pyaudio.paFloat32,
-			channels=1,
-			frames_per_buffer=hopS,
-			rate=samplerate,
-			output=True,
-			stream_callback=callBack)
 
 ###Graphics Classes and Methods
 
@@ -472,6 +472,13 @@ def run(width=500, height=600):
 	root.mainloop()  # blocks until window is closed
 	print("bye!")
 
+p = pyaudio.PyAudio()
+stream = p.open(format=pyaudio.paFloat32,
+			channels=1,
+			frames_per_buffer=hopS,
+			rate=samplerate,
+			output=True,
+			stream_callback=callBack)
 
 startT=time.time()
 flashT=time.time()
