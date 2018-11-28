@@ -1,3 +1,21 @@
+'''
+Name: Arden Diakhate-Palme
+Date:11/23/2018
+
+SongRider 15-112 Term Project
+Usage:
+
+To play the game, run the following in Terminal:
+	python parseAudioCallback.py Files/<song.wav>
+
+NOTE:
+	Autolab does not allow submissions of .wav files
+	as they are greater than 10MB, so you'll have to convert
+	the .mp3 files in Files/ to .wav files before calling them
+
+	Also, try running twice, sometimes an error occurs the first time
+'''
+
 import sys
 import math
 import random
@@ -31,6 +49,7 @@ beatO = aubio.tempo("default",winS,hopS,samplerate)
 click = 0.7 * np.sin(2. * np.pi * np.arange(hopS) / hopS * samplerate / 3000.)
 
 fmtAudio=[]
+gameStarted=False
 
 #instead of timerFired() this function will be called in sync with audio
 #this is a significant imporvment from my last code because the beats and pitches line up
@@ -49,7 +68,6 @@ def callBack(_in_data, _frame_count, _time_info, _status):
 		midiPitch=0
 
 	if isBeat and beatConf > 0.1:
-		samples+=click
 		#define beats by negative pitch
 		midiPitch=isBeat[0]*-1
 	
@@ -221,22 +239,40 @@ def init(data):
 	data.player1= Player(data.width//2,data.height//2,20)
 	data.startShootT= 0
 
+	data.gameStarted=False
+	data.gameEnded=False
+
 def redrawAll(canvas,data):
-	canvas.create_line(data.width//6,0,data.width//6,data.height)
-	canvas.create_line(data.width - data.width//6,0,data.width - data.width//6,data.height)
+	if data.gameStarted:
+		canvas.create_line(data.width//6,0,data.width//6,data.height)
+		canvas.create_line(data.width - data.width//6,0,data.width - data.width//6,data.height)
 
-	canvas.create_rectangle(data.width//2-30,0,data.width//2+30,30,fill='white')
-	canvas.create_text(data.width//2,15,text="Score: "+str(data.player1.maxScore))
+		canvas.create_rectangle(data.width//2-30,0,data.width//2+30,30,fill='white')
+		canvas.create_text(data.width//2,15,text="Score: "+str(data.player1.maxScore))
 
-	data.player1.draw(canvas)
-	for block in data.blocks:
-		block.draw(canvas)
+		data.player1.draw(canvas)
+		for block in data.blocks:
+			block.draw(canvas)
 
-	for bullet in data.bullets:
-		bullet.draw(canvas)
+		for bullet in data.bullets:
+			bullet.draw(canvas)
 
+	elif not data.gameEnded:
+		canvas.create_rectangle(data.width//2-data.width//4,data.height//2-data.height//4,data.width//2+data.width//4,data.height//2+data.height//4,fill='white')
+		canvas.create_text(data.width//2,data.height//2,text="Songrider",font="Arial 32")
+		
+		canvas.create_rectangle(data.width//2-data.width//4,data.height//2+data.height//6,data.width//2,data.height//2+data.height//4)
+		canvas.create_text(data.width//2-data.width//6,data.height//2+data.height//5,text="Start")
+		
 
 def mousePressed(event,data):
+	if not data.gameStarted and not data.gameEnded:
+		if event.x > data.width//2-data.width//4 and event.x < data.width//2:
+			if event.y > data.height//2+data.height//6 and event.y < data.height//2 +data.height//4:
+				global gameStarted
+				gameStarted=True
+				data.gameStarted =True
+
 	playerX = data.player1.x + data.player1.width//2
 	playerY = data.player1.y
 	if event.x-playerX < 0:
@@ -355,41 +391,41 @@ def addBlock(data,val):
 	data.blocks+=[Block(val,10,20,size)]
 
 def timerFired(data):
-	data.timerCalled+=1
+	if data.gameStarted:
+		data.timerCalled+=1
+		#set bounds for pitches
+		dataMax=data.width - data.width//4
+		dataMin=data.width//4
 
-	#set bounds for pitches
-	dataMax=data.width - data.width//4
-	dataMin=data.width//4
+		manipBlocks(data,dataMin,dataMax)
 
-	manipBlocks(data,dataMin,dataMax)
+		global fmtAudio
+		lastSample = fmtAudio[-1]
 
-	global fmtAudio
-	lastSample = fmtAudio[-1]
-
-	if len(fmtAudio) > 200:
-		pitchRange=np.ptp(abs(np.array(fmtAudio[-100:])))
-	else:
-		pitchRange=200
+		if len(fmtAudio) > 200:
+			pitchRange=np.ptp(abs(np.array(fmtAudio[-100:])))
+		else:
+			pitchRange=200
 
 
-	if lastSample < 0:
-		data.currBeat=abs(lastSample)
+		if lastSample < 0:
+			data.currBeat=abs(lastSample)
 
-	elif lastSample > 0:
-		avgPitch= np.average(np.array(fmtAudio[-10:]))
-		val = ((avgPitch / pitchRange)*(dataMax-dataMin)) + dataMin
-	else:
-		val=dataMin
+		elif lastSample > 0:
+			avgPitch= np.average(np.array(fmtAudio[-10:]))
+			val = ((avgPitch / pitchRange)*(dataMax-dataMin)) + dataMin
+		else:
+			val=dataMin
 
-	global startT
-	if data.currBeat == data.lastBeat and data.currBeat != 0:
-		if time.time()-startT > data.currBeat:
-			addBlock(data,val)
-			newSpeed=abs(10-int(data.currBeat*20)//3 + 2)
-			data.scrollSpeed=newSpeed
-			startT=time.time()
+		global startT
+		if data.currBeat == data.lastBeat and data.currBeat != 0:
+			if time.time()-startT > data.currBeat:
+				addBlock(data,val)
+				newSpeed=abs(10-int(data.currBeat*20)//3 + 2)
+				data.scrollSpeed=newSpeed
+				startT=time.time()
 
-	data.lastBeat= data.currBeat
+		data.lastBeat= data.currBeat
 
 
 def run(width=500, height=600):
@@ -436,11 +472,13 @@ def run(width=500, height=600):
 	root.mainloop()  # blocks until window is closed
 	print("bye!")
 
-stream.start_stream()
 
 startT=time.time()
 flashT=time.time()
 run()
+
+if gameStarted:
+	stream.start_stream()
 
 # wait for stream to finish
 if stream.is_active():
