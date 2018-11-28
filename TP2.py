@@ -1,6 +1,6 @@
 '''
 Name: Arden Diakhate-Palme
-Date:11/26/2018
+Date:11/28/2018
 
 SongRider 15-112 Term Project
 Usage:
@@ -11,16 +11,7 @@ To play the game, run the following in Terminal:
 NOTE:
 	Autolab does not allow submissions of .wav files
 	as they are greater than 10MB, so you'll have to convert
-	the .mp3 files in Files/ to .wav files before calling them
-
-	Also, try running twice, sometimes an error occurs the first time
-
-
-GOALS:
-1.find out if you can make music speed up 
-2.adapt code
-
-3.Add coins
+	the .mp3 to .wav files before calling them 
 
 '''
 
@@ -33,6 +24,7 @@ import aubio
 import numpy as np
 from tkinter import *
 
+# sample sizes for each aubio sample and aubio FFT size
 winS = 1024 
 hopS = 512 
 
@@ -43,6 +35,7 @@ if len(sys.argv) < 1:
 
 filename = sys.argv[1]
 
+#initialize aubio File, Beat, and Pitch objects
 samplerate=0
 file = aubio.source(filename, samplerate, hopS)
 samplerate = file.samplerate
@@ -57,13 +50,14 @@ beatO = aubio.tempo("default",winS,hopS,samplerate)
 click = 0.7 * np.sin(2. * np.pi * np.arange(hopS) / hopS * samplerate / 3000.)
 
 fmtAudio=[]
-gameStarted=False
 
-#instead of timerFired() this function will be called in sync with audio
-#this is a significant imporvment from my last code because the beats and pitches line up
+songSpeed= 1 #measured in times the default speed 
+
+#This callback function is called whenever pyAudio needs to play the next set of bytes in the song
 def callBack(_in_data, _frame_count, _time_info, _status):
 	global fmtAudio
 
+	#get aubio pitch and tempo analysis of a single sample of size hopS
 	samples, read = file()
 	isBeat = beatO(samples)
 	pitch = pitchO(samples)[0]
@@ -80,21 +74,38 @@ def callBack(_in_data, _frame_count, _time_info, _status):
 		midiPitch=isBeat[0]*-1
 	
 	fmtAudio+=[midiPitch]
-
 	audiobuf = samples.tobytes()
+
+	#tell pyAudio to continue if the song isn't done, or stop if it is
 	if read < hopS:
 		return (audiobuf, pyaudio.paComplete)
 	return (audiobuf, pyaudio.paContinue)
 
+#initialize pyAudio and establish stream
+p = pyaudio.PyAudio()
+stream = p.open(format=pyaudio.paFloat32,
+			channels=1,
+			frames_per_buffer=hopS,
+			rate=samplerate,
+			output=True,
+			stream_callback=callBack)
+
+stream.stop_stream()
+
 ###Graphics Classes and Methods
 
+
 class Block(object):
-	def __init__(self,x,y,width,height):
+	def __init__(self,x,y,width,height,speedUp):
 		self.x=x
 		self.y=y
 		self.height=height
 		self.width=width
-		self.color='red'
+		self.canSpeedUpSong = speedUp
+		if self.canSpeedUpSong:
+			self.color='purple'
+		else:
+			self.color='red'
 
 	def draw(self,canvas):
 		canvas.create_rectangle(self.x,self.y,self.x+self.width,self.y+self.height,fill=self.color)
@@ -118,6 +129,7 @@ class Player(object):
 		self.width=20
 		self.height=30
 		self.color='green'
+		self.textColor='black'
 		self.protected=0
 		self.isActive=False
 
@@ -129,16 +141,9 @@ class Player(object):
 
 	def draw(self,canvas):
 		canvas.create_rectangle(self.x,self.y,self.x+self.width,self.y+self.height,fill=self.color)
-		canvas.create_text(self.x+self.width//2,self.y+self.height//2,text=str(self.score))
+		canvas.create_text(self.x+self.width//2,self.y+self.height//2,text=str(self.score),fill=self.textColor)
 
-	def flashColor(self,color,t):
-		global flashT
-		if time.time() - flashT > t:
-			self.color=color
-			flashT=time.time()
-		else:
-			self.color='green'
-
+	#checks collisions with a block class, of which each other game element is a subclass 
 	def collided(self,other):
 		if other.x > self.x:
 			if other.x < self.x + self.width:
@@ -154,7 +159,7 @@ class Player(object):
 					return True
 		return False
 
-		
+	#PLayer can only shoot bullets if the powerUpShoot is still active
 	def shoot(self,angle):
 		if self.isActive:
 			return Bullet(self.x+self.width//2,self.y,angle)
@@ -181,6 +186,7 @@ class Bullet(object):
 			return False
 		return True
 
+	#detect collisions between bullets and game objects
 	def collided(self,other):
 		#assuming other is a block
 		if other.x > self.x:
@@ -202,7 +208,7 @@ class Bullet(object):
 
 class PowerUp(Block):
 	def __init__(self,x,y,width,height):
-		super().__init__(x,y,width,height)
+		super().__init__(x,y,width,height,False)
 		self.color='yellow'
 	
 	def draw(self,canvas):
@@ -210,7 +216,7 @@ class PowerUp(Block):
 
 class PowerUpShoot(Block):
 	def __init__(self,x,y,width,height):
-		super().__init__(x,y,width,height)
+		super().__init__(x,y,width,height,False)
 		self.color='orange'
 	
 	def draw(self,canvas):
@@ -219,7 +225,7 @@ class PowerUpShoot(Block):
 
 class GameBlock(Block):
 	def __init__(self,x,y,width,height):
-		super().__init__(x,y,width,height)
+		super().__init__(x,y,width,height,False)
 		self.color='green'
 
 	def draw(self,canvas):
@@ -228,11 +234,12 @@ class GameBlock(Block):
 ###TKinter Functions
 
 def init(data):
+	#variables for timing addBlocks()
 	data.timerCalled=0
 	data.lastBeat=0
 	data.currBeat=0
 
-	data.scrollSpeed=2
+	data.scrollSpeed=2 #defalut scrollspeed
 	data.blocks=[]
 	data.bullets=[]
 
@@ -241,6 +248,8 @@ def init(data):
 
 	data.gameStarted=False
 	data.gameEnded=False
+
+	data.changedSongSpeed=False
 
 def redrawAll(canvas,data):
 	if data.gameStarted:
@@ -257,24 +266,38 @@ def redrawAll(canvas,data):
 		for bullet in data.bullets:
 			bullet.draw(canvas)
 
+	#if game not yet begun, display beginning pannel 
 	elif not data.gameEnded:
 		canvas.create_rectangle(data.width//2-data.width//4,data.height//2-data.height//4,data.width//2+data.width//4,data.height//2+data.height//4,fill='white')
 		canvas.create_text(data.width//2,data.height//2,text="Songrider",font="Arial 32")
-		
+
+		#format filename
+		fmtFileName = str(filename)
+		fmtFileName = fmtFileName[fmtFileName.find('/')+1:fmtFileName.find('.wav')]
+
+		canvas.create_text(data.width//2,data.height//2+data.height//8,text="Song: "+fmtFileName,font="Arial 20")
+
 		canvas.create_rectangle(data.width//2-data.width//4,data.height//2+data.height//6,data.width//2,data.height//2+data.height//4)
 		canvas.create_text(data.width//2-data.width//6,data.height//2+data.height//5,text="Start")
-		
+
+	#if the game is over, display the end pannel and show the ultimate score
+	elif data.gameEnded:
+		canvas.create_rectangle(data.width//2-data.width//4,data.height//2-data.height//4,data.width//2+data.width//4,data.height//2+data.height//4,fill='white')
+		canvas.create_text(data.width//2,data.height//2,text="Game Over",font="Arial 32")
+		canvas.create_text(data.width//2,data.height//2+data.width//6,text="Score:"+ str(data.player1.maxScore),font="Arial 20")
 
 def mousePressed(event,data):
 	if not data.gameStarted and not data.gameEnded:
+		#check if clicked on Start button 
 		if event.x > data.width//2-data.width//4 and event.x < data.width//2:
 			if event.y > data.height//2+data.height//6 and event.y < data.height//2 +data.height//4:
-				global gameStarted
-				gameStarted=True
 				data.gameStarted =True
+
 
 	playerX = data.player1.x + data.player1.width//2
 	playerY = data.player1.y
+
+	#calculate the angle at which the bullet is fired 
 	if event.x-playerX < 0:
 		angle = math.pi + math.atan((playerY - event.y) / (event.x - playerX) )
 	elif event.x-playerX == 0:
@@ -282,6 +305,7 @@ def mousePressed(event,data):
 	else:
 		angle = math.atan((playerY - event.y) / (event.x - playerX) )
 
+	#check if the player can still shoot bullets 
 	if data.player1.shoot(abs(angle)) != None:
 		data.bullets += [data.player1.shoot(abs(angle))]
 
@@ -292,7 +316,15 @@ def keyPressed(event,data):
 	elif event.keysym == 'Left':
 		data.player1.moveLeft()
 
+	#quit the game if the user presses 'q'
+	elif event.char == 'q':
+		data.gameStarted=False
+		data.gameEnded = True
+
+#this helper function handles block movement for each
+#timerFired call
 def manipBlocks(data,dataMin,dataMax):
+	#check bullet - block collisons
 	z=0
 	while z < len(data.bullets):
 		i=0
@@ -302,10 +334,10 @@ def manipBlocks(data,dataMin,dataMax):
 			if bullet.collided(block):
 				data.player1.score+=1
 				data.blocks.pop(i)
-				data.bullets.pop(z)
 			i+=1	
 		z+=1
 
+	#handle player - block collisons
 	k=0
 	while k < len(data.blocks):
 		block=data.blocks[k]
@@ -313,31 +345,74 @@ def manipBlocks(data,dataMin,dataMax):
 			if isinstance(block,PowerUp):
 				data.blocks.pop(k)
 				data.player1.protected+=1
-				print(data.player1.protected)
-				data.player1.flashColor('yellow',0.2)
+				data.player1.color = 'yellow'
+				data.player1.textColor='black'
 
 			elif isinstance(block,PowerUpShoot):
 				data.startShootT= data.timerCalled
 				data.player1.isActive=True
 				data.blocks.pop(k)
-				data.player1.flashColor('orange',0.2)
+				data.player1.color = 'orange'
+				data.player1.textColor='black'
 
 			elif isinstance(block,GameBlock):
+				#if the player is shielded (by a powerUp)
+				#the score and scrollSpeed stay constant
+				#game block is removed
 				if data.player1.protected > 0:
-					data.player1.flashColor('red',0.2)
+					data.player1.color= 'green'
+					data.player1.textColor='white'
 					data.player1.protected-=1
+					data.blocks.pop(k)
 				else:
-					data.player1.flashColor('red',0.1)
+					data.player1.color = 'red'
+					data.player1.textColor='black'
 					data.player1.score=0
 					data.scrollSpeed=2
 			else:
+				#if the player is shielded (by a powerUp)
+				#the score and scrollSpeed stay constant
+				#game block is removed
+
 				if data.player1.protected > 0:
-					data.player1.flashColor('red',0.2)
+					data.player1.color = 'green'
+					data.player1.textColor='white'
 					data.player1.protected-=1
+					data.blocks.pop(k)
 				else:
-					data.player1.flashColor('red',0.1)
 					data.player1.score=0
-					data.scrollSpeed=2
+
+					#handle song acceleration
+					if block.canSpeedUpSong:
+						data.player1.color = 'purple'
+						data.player1.textColor='white'
+						data.blocks.pop(k)
+						
+						global songSpeed
+						global stream
+						global startSpeedUpT
+
+						data.changedSongSpeed=True
+						songSpeed+=0.2
+						stream.stop_stream()
+						startSpeedUpT = time.clock()
+
+						stream = p.open(format=pyaudio.paFloat32,
+										channels=1,
+										frames_per_buffer=hopS,
+										rate=int(samplerate*songSpeed),
+										output=True,
+										stream_callback=callBack)
+						stream.start_stream()
+						
+						#make changes to game based on sped-up song
+						data.scrollSpeed*=songSpeed*6
+
+					else:
+						#if the player didn't hit a music block and didn't have a powerup
+						data.player1.color = 'red'
+						data.player1.textColor='black'
+						data.scrollSpeed=2
 		k+=1
 
 	shootingT = 200 #tens of milliseconds
@@ -347,12 +422,13 @@ def manipBlocks(data,dataMin,dataMax):
 		else:
 			data.player1.isActive=True
 
-	if data.timerCalled % 500 ==0:
+	#add a powerUpShoot object every 5100 milliseconds
+	if data.timerCalled % 510 ==0:
 		randX= random.randint(dataMin,dataMax)
 		randSize= random.randint(10,30)
 		data.blocks+=[PowerUpShoot(randX,10,randSize,randSize)]
 
-				
+	#add a powerUp object every 2300 milliseconds
 	if data.timerCalled % 230 == 0:
 		randX= random.randint(dataMin,dataMax)
 		randSize= random.randint(10,30)
@@ -361,7 +437,7 @@ def manipBlocks(data,dataMin,dataMax):
 	if data.timerCalled % 100 == 0:
 		#score increase based on game speed
 		data.player1.score+= data.scrollSpeed//3
-		if data.player1.score > data.player1.maxScore:
+		if data.player1.score > data.player1.maxScore:   #update maxScore 
 			data.player1.maxScore=data.player1.score
 
 		randX= random.randint(dataMin,dataMax)
@@ -377,31 +453,64 @@ def manipBlocks(data,dataMin,dataMax):
 			data.bullets.pop(z)
 		z+=1
 
+	#remove blocks that go off the screen
 	j=0
 	while j < len(data.blocks):
 		if not data.blocks[j].inBounds(data):
 			data.blocks.pop(j)
 		j+=1
 
+	#move blocks down the screen
 	for block in data.blocks:
 		block.y+=data.scrollSpeed
 
 def addBlock(data,val):
 	size = int(data.currBeat*20)
-	data.blocks+=[Block(val,10,20,size)]
+	#add a speed-up-song block every 10 blocks added
+	if len(data.blocks) % 5 == 0 and len(data.blocks) != 0:
+		data.blocks+=[Block(val,10,20,size,True)]
+	else:
+		data.blocks+=[Block(val,10,20,size,False)]
 
 def timerFired(data):
-	if data.gameStarted:
+	#handle song acceleration
+	global startSpeedUpT
+	global songSpeed
+	global stream
+
+	speedTime=1.5 #seconds for how long the song should be sped up for
+	if(time.clock()-startSpeedUpT) > speedTime and data.changedSongSpeed:
+		#reset speedUp time and reset speed-changed Flag
+		startSpeedUpT=time.clock()
+		data.changedSongSpeed=False
+		songSpeed=1
+		stream.stop_stream()
+		stream = p.open(format=pyaudio.paFloat32,
+				channels=1,
+				frames_per_buffer=hopS,
+				rate=samplerate,
+				output=True,
+				stream_callback=callBack)
+		stream.start_stream()
+
+	if data.gameStarted and not data.gameEnded:
+		if not stream.is_active():
+			stream.start_stream()
 		data.timerCalled+=1
-		#set bounds for pitches
+
+		#set bounds for pitches rescaling to data
 		dataMax=data.width - data.width//4
 		dataMin=data.width//4
 
 		manipBlocks(data,dataMin,dataMax)
 
 		global fmtAudio
-		lastSample = fmtAudio[-1]
+		if len(fmtAudio) > 0:
+			lastSample = fmtAudio[-1]
+		else:
+			lastSample = -0.5
 
+		#only calculate pitchRange if there are over 200 beat/pitch samples
 		if len(fmtAudio) > 200:
 			pitchRange=np.ptp(abs(np.array(fmtAudio[-100:])))
 		else:
@@ -410,7 +519,7 @@ def timerFired(data):
 
 		if lastSample < 0:
 			data.currBeat=abs(lastSample)
-
+			val = dataMin
 		elif lastSample > 0:
 			avgPitch= np.average(np.array(fmtAudio[-10:]))
 			val = ((avgPitch / pitchRange)*(dataMax-dataMin)) + dataMin
@@ -419,6 +528,7 @@ def timerFired(data):
 
 		global startT
 		if data.currBeat == data.lastBeat and data.currBeat != 0:
+			#only add a block on intervals of the song tempo (calculated in data.currBeat)
 			if time.time()-startT > data.currBeat:
 				addBlock(data,val)
 				newSpeed=abs(10-int(data.currBeat*20)//3 + 2)
@@ -426,6 +536,9 @@ def timerFired(data):
 				startT=time.time()
 
 		data.lastBeat= data.currBeat
+
+	elif data.gameEnded:
+		stream.stop_stream()
 
 
 def run(width=500, height=600):
@@ -472,25 +585,13 @@ def run(width=500, height=600):
 	root.mainloop()  # blocks until window is closed
 	print("bye!")
 
-p = pyaudio.PyAudio()
-stream = p.open(format=pyaudio.paFloat32,
-			channels=1,
-			frames_per_buffer=hopS,
-			rate=samplerate,
-			output=True,
-			stream_callback=callBack)
-
+#time inits for timers
 startT=time.time()
-flashT=time.time()
+startSpeedUpT=time.clock()
+
 run()
 
-if gameStarted:
-	stream.start_stream()
-
-# wait for stream to finish
-if stream.is_active():
-	time.sleep(0.1)
-
+#close pyAudio Stream instance and terminate object
 stream.stop_stream()
 stream.close()
 p.terminate()
