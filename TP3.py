@@ -1,8 +1,9 @@
 '''
 Name: Arden Diakhate-Palme
-Date:11/28/2018
+Date:12/5/2018
 
 SongRider 15-112 Term Project
+
 Usage:
 
 To play the game, run the following in Terminal:
@@ -12,9 +13,6 @@ NOTE:
 	Autolab does not allow submissions of .wav files
 	as they are greater than 10MB, so you'll have to convert
 	the .mp3 to .wav files before calling them 
-
-GOALS:
--shoot lasers at blocks
 
 '''
 
@@ -51,8 +49,7 @@ pitchO.set_tolerance(tolerance)
 
 beatO = aubio.tempo("default",winS,hopS,samplerate)
 
-click = 0.7 * np.sin(2. * np.pi * np.arange(hopS) / hopS * samplerate / 3000.)
-
+#fmtAudio stores audio data computed in real-time
 fmtAudio=[]
 
 songSpeed= 1 #measured in times the default speed 
@@ -119,6 +116,7 @@ class Block(object):
 		display(canvas,data,pos,self.width,self.depth,self.offset,None,self.colorVal)
 
 	def inBounds(self,data):
+		#check if went past player / off the screen
 		if self.z <= 0:
 			return False
 		return True
@@ -142,10 +140,10 @@ class Bullet(object):
 	def collided(self,other,data):
 		if isinstance(other,Block):
 		
-			#display functions
 			a=[self.x,self.y,self.z]
 			b=[other.x,other.y,other.z]
 
+			#set z-coordinate to 1 if below 0, to allow for calculations
 			if b[2] <=0 or math.isclose(b[2],0.0):
 				b[2]=1
 
@@ -179,10 +177,9 @@ class Player(object):
 		self.height=5
 		self.depth=1
 
-		self.colorVal=0
-		self.textColor='black'
+		self.colorVal=0      #indexes the color scheme values
 		self.protected=0
-		self.isActive=False
+		self.isActive=False  #checks if the player can shoot
 
 	def moveLeft(self):
 		if self.x > -220:
@@ -199,6 +196,7 @@ class Player(object):
 		else:
 			display(canvas,data,pos,self.width,self.depth,0,self.score,self.colorVal)
 
+	#gets bullet objects to shoot from player
 	def shoot(self,data):
 		a=[self.x,self.y,self.z]
 		if a[2] <= 0:
@@ -213,7 +211,6 @@ class Player(object):
 
 	#checks collisions with a block class, of which each other game element is a subclass 
 	def collided(self,other,data):
-		#display functions
 		a=[self.x,self.y,self.z]
 		b=[other.x,other.y,other.z]
 
@@ -223,6 +220,7 @@ class Player(object):
 		if b[2] <0 or math.isclose(b[2],0.0):
 			b[2]=1
 
+		#calculate 3D graphics changes in position
 		dX = (data.vanishPt[0])*(self.z**-1) + self.width
 		dXB = (data.vanishPt[0])*(b[2]**-1) + other.width
 
@@ -254,20 +252,6 @@ class PowerUpShoot(Block):
 	def draw(self,data,canvas):
 		pos=[self.x,self.y,self.z]
 		displaySphere(canvas,data,pos,self.width,self.offset,self.color)
-	
-class GameBlock(Block):
-	def __init__(self,x,y,z,rad):
-		super().__init__(x,y,z,rad,rad,False)
-		self.color='green'
-
-	def draw(self,data,canvas):
-		pos = [self.x,self.y,self.z]
-		screenY = ((data.height*2)/a[2]) + (data.vanishPt[1])
-		dX = (data.vanishPt[0])*(a[2]**-1) + width
-		dY = (data.vanishPt[1])*(a[2]**-1) + a[1]
-		a[0]+= data.vanishPt[0]+(offset*10*a[2]**-1)
-
-		canvas.create_polygon(a[0]-dX,screenY-dY,a[0],screen[y],a[0]+dX,screenY+dY,fill=colorScheme[colorVal][3])
 
 def init(data):
 	#variables for timing addBlocks()
@@ -294,15 +278,19 @@ def init(data):
 	data.worldZ=data.vanishPt[2]
 	data.raceCarImg= PhotoImage(file="formula1.gif")
 	data.raceCarBumper= PhotoImage(file="bumper.gif")
+	data.skyImage=PhotoImage(file="sky.gif")
 	data.rise=20 #calculates the road rise
 
+#display function for 3D pseudo-graphic rendering of blocks
 def display(canvas,data,a,width,depth,offset,score,colorVal):
+	#colors for blocks and surfaces
 	colorScheme = {
 	0:['blue','orange','green','red'],
 	1:['yellow','purple','brown','white'],
 	2:['pink','blue','orange','green'],
-	3:['#%02x%02x%02x' % (0,100,0),'#%02x%02x%02x' % ((0,140,0)),'#%02x%02x%02x' % ((0,20,0)),'#%02x%02x%02x' % ((0,255,0))]
+	3:['medium spring green','forest green','green yellow','dark sea green']
 	}
+
 	aP = copy.copy(a)
 	if a[2] <= 0:
 		a[2] = 1
@@ -315,10 +303,10 @@ def display(canvas,data,a,width,depth,offset,score,colorVal):
 	aP[1] = (a[2]/aP[2]) * a[1]
 	aP[0]= (a[2]/aP[2]) * a[0]
 
-	fovX = 60 #deg
 	screenY = ((data.height*2)/a[2]) + (data.vanishPt[1])
 	screenYP = ((data.height*2)/aP[2]) + (data.vanishPt[1])
 
+	#calculates changes in X and Y as the object moves in z space
 	dX = (data.vanishPt[0])*(a[2]**-1) + width
 	dXP= (data.vanishPt[0])*(aP[2]**-1) + width
 
@@ -333,6 +321,8 @@ def display(canvas,data,a,width,depth,offset,score,colorVal):
 	canvas.create_polygon(aP[0]-dXP,screenYP+dYP,aP[0]-dXP,screenYP-dYP,a[0]-dX,screenY-dY,a[0]-dX,screenY+dY,fill=colorScheme[colorVal][1])
 	canvas.create_polygon(aP[0]+dXP,screenYP-dYP,a[0]+dX,screenY-dY,a[0]-dX,screenY-dY,aP[0]-dXP,screenYP-dYP,fill=colorScheme[colorVal][2])
 	canvas.create_rectangle(a[0]-dX,screenY-dY,a[0]+dX,screenY+dY,fill=colorScheme[colorVal][3])
+	
+	#displays score
 	if score != None:
 		canvas.create_rectangle(a[0]-dX,screenY-dY,a[0]+dX,screenY+dY,fill='white')
 		canvas.create_image(a[0],screenY,anchor=CENTER,image=data.raceCarBumper)
@@ -340,6 +330,7 @@ def display(canvas,data,a,width,depth,offset,score,colorVal):
 	else:
 		canvas.create_rectangle(a[0]-dX,screenY-dY,a[0]+dX,screenY+dY,fill=colorScheme[colorVal][3])
 
+#3D rendering of Powerups
 def displaySphere(canvas,data,a,rad,offset,color):
 	if a[2] <= 0:
 		a[2] = 1
@@ -349,6 +340,7 @@ def displaySphere(canvas,data,a,rad,offset,color):
 
 	canvas.create_oval(a[0]-dR,screenY+dR,a[0]+dR,screenY-dR,fill=color)
 
+#3D rendering of Bullets
 def displayBullet(canvas,data,a,rad,offset,color):
 	if a[2] <= 0:
 		a[2] = 1
@@ -360,9 +352,9 @@ def displayBullet(canvas,data,a,rad,offset,color):
 def redrawAll(canvas,data):
 	if data.gameStarted:
 		#sky
-		canvas.create_polygon(0,0,data.width,0,data.width,data.vanishPt[1],0,data.vanishPt[1])
+		canvas.create_polygon(0,0,data.width,0,data.width,data.vanishPt[1],0,data.vanishPt[1],fill='SkyBlue1')
 
-		#scoreBoard
+		#draws the scoreBoard
 		canvas.create_rectangle(data.width//2-80,0,data.width//2+80,40,fill='white')
 		canvas.create_text(data.width//2-45,15,text="Score: "+str(data.player1.maxScore))
 		canvas.create_text(data.width//2+35,15,text="Protected: "+str(data.player1.protected))
@@ -371,8 +363,7 @@ def redrawAll(canvas,data):
 			canvas.create_text(data.width//2,70,text="FIRE!",fill='red',font='Arial 20')
 
 
-
-		#road
+		#draw a 3d road
 		canvas.create_polygon(data.vanishPt[0]-data.roadGap,data.vanishPt[1],0,data.height-data.rise,data.width,data.height-data.rise,
 			data.vanishPt[0]+data.roadGap,data.vanishPt[1],fill=data.roadColor)
 		canvas.create_polygon(0,data.height-data.rise,data.width,data.height-data.rise,data.width,data.height,0,data.height, fill=data.roadColor)
@@ -395,11 +386,17 @@ def redrawAll(canvas,data):
 		#format filename
 		fmtFileName = str(filename)
 		fmtFileName = fmtFileName[fmtFileName.find('/')+1:fmtFileName.find('.wav')]
+
+		#explain game rules
 		canvas.create_rectangle(0,332,data.width,510)
 		canvas.create_text(data.width//2,data.height//2+data.height//8,text="Song: "+fmtFileName,font="Arial 20")
-		canvas.create_text(data.width//2,data.height//2+120,text='Avoid the blocks to increase your score\nYellow powerups let you hit blocks',font='Arial 20')
-		canvas.create_rectangle(data.width//2-data.width//4,data.height//2+data.height//4,data.width//2+data.width//4,510)
-		canvas.create_text(data.width//2,data.height//2+180,text="Start",font='Arial 40')
+		canvas.create_text(data.width//2,data.height//2+160,\
+			text="* Avoid and destroy the blocks to increase your score\n"+\
+			"* Yellow powerups protect you from blocks\n* Orange powerups let you fire\n" +\
+			"* Press \'space\' to fire to destroy blocks" ,font='Arial 20')
+		
+		canvas.create_rectangle(data.width//2-data.width//4,data.height-data.height//7,data.width//2+data.width//4,data.height-5)
+		canvas.create_text(data.width//2,557,text="Start",font='Arial 40')
 
 	#if the game is over, display the end pannel and show the ultimate score
 	elif data.gameEnded:
@@ -414,11 +411,11 @@ def manipBlocks(data,dataMin,dataMax):
 		randSize= random.randint(10,20)
 		data.blocks+=[PowerUp(data.worldZ,randSize,randOffset)]
 
-	if data.timerCalled % 100 == 0:
+	#add a powerUpShoot object every 2 seconds
+	if data.timerCalled % 200 == 0:
 		randOffset= random.randint(dataMin,dataMax)
 		randSize= random.randint(10,20)
 		data.blocks+=[PowerUpShoot(data.worldZ,randSize,randOffset)]
-	
 
 	if data.timerCalled % 100 == 0:
 		#score increase based on game speed
@@ -426,6 +423,7 @@ def manipBlocks(data,dataMin,dataMax):
 		if data.player1.score > data.player1.maxScore:   #update maxScore 
 			data.player1.maxScore=data.player1.score
 	
+	#handle bullet-block collisions
 	z=0
 	while z < len(data.bullets):
 		w=0
@@ -438,6 +436,7 @@ def manipBlocks(data,dataMin,dataMax):
 			w+=1	
 		z+=1
 
+	#delete blocks that move off the screen
 	i=0
 	while i < len(data.blocks):
 		block = data.blocks[i]
@@ -445,6 +444,7 @@ def manipBlocks(data,dataMin,dataMax):
 			data.blocks.pop(i)
 		i+=1
 
+	#delete blocks that move out of the world
 	j=0
 	while j < len(data.bullets):
 		bullet = data.bullets[j]
@@ -452,6 +452,7 @@ def manipBlocks(data,dataMin,dataMax):
 			data.bullets.pop(j)
 		j+=1
 	
+	#handle player-block collisions
 	k=0
 	while k < len(data.blocks):
 		block=data.blocks[k]
@@ -470,20 +471,6 @@ def manipBlocks(data,dataMin,dataMax):
 				data.player1.color = 'orange'
 				data.player1.textColor='black'
 
-			elif isinstance(block,GameBlock):
-				#if the player is shielded (by a powerUp)
-				#the score and scrollSpeed stay constant
-				#game block is removed
-				if data.player1.protected > 0:
-					data.player1.color= 'green'
-					data.player1.textColor='white'
-					data.player1.protected-=1
-					data.blocks.pop(k)
-				else:
-					data.player1.color = 'red'
-					data.player1.textColor='black'
-					data.player1.score=0
-					data.scrollSpeed=2
 			else:
 
 				#if the player is shielded (by a powerUp)
@@ -531,6 +518,7 @@ def manipBlocks(data,dataMin,dataMax):
 						data.blocks.pop(k)	
 		k+=1
 
+	#limits the time the player can shoot for
 	shootingT = 80 #tens of milliseconds
 	if data.player1.isActive:
 		if data.timerCalled - data.startShootT > shootingT:
@@ -544,6 +532,7 @@ def manipBlocks(data,dataMin,dataMax):
 	for bullet in data.bullets:
 		bullet.move()
 
+#adds a block to the game
 def addBlock(data,val):
 	size = int(data.currBeat*20)
 	#add a speed-up-song block every 3 sec
@@ -577,6 +566,7 @@ def timerFired(data):
 		if not stream.is_active():
 			stream.start_stream()
 		data.timerCalled+=1
+		
 		#set bounds for pitches rescaling to data
 		dataMax=50
 		dataMin=-50
@@ -595,7 +585,7 @@ def timerFired(data):
 		else:
 			pitchRange=200
 
-
+		#calculate discrete pitch
 		if lastSample < 0:
 			data.currBeat=abs(lastSample)
 			avgPitch = 0
@@ -617,6 +607,7 @@ def timerFired(data):
 				dataMin,dataMax = 30-data.rise,data.rise+30
 				val = ((avgPitch / pitchRange)*(dataMax-dataMin)) + dataMin
 				addBlock(data,val)
+				#update scrollSpeed depending on pitch
 				newSpeed=abs(10-int(data.currBeat*20)//3 + 2)
 				data.scrollSpeed=newSpeed
 				startT=time.time()
@@ -630,7 +621,7 @@ def mousePressed(event,data):
 	if not data.gameStarted and not data.gameEnded:
 		#check if clicked on Start button 
 		if event.x > data.width//2-data.width//4 and event.x < data.width//2+data.width//4:
-			if event.y > data.height//2+data.height//4 and event.y < 510:
+			if event.y > data.height-data.height//7 and event.y < data.height-5:
 				data.gameStarted =True
 
 def keyPressed(event,data):
@@ -644,14 +635,13 @@ def keyPressed(event,data):
 		if data.player1.shoot(data) != None:
 			data.bullets+=[data.player1.shoot(data)]
 
-	elif event.keysym == 'Down':
-		data.player1.isActive=False
-	
-	if event.char == 'a':
-		data.player1.isActive=True
+		#quit the game if the user presses 'q'
+	if event.char == 'q':
+		data.gameStarted=False
+		data.gameEnded = True
 		
 	
-#112 run function
+#The run() function taken from the CMU's 15-112 Course website
 def run(width=500, height=600):
 	def redrawAllWrapper(canvas, data):
 		canvas.delete(ALL)
