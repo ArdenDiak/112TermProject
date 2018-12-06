@@ -14,10 +14,7 @@ NOTE:
 	the .mp3 to .wav files before calling them 
 
 GOALS:
--show protected in top next to score
--demo the good part of the classical
--make it so you cant go more than the road out of the road
--make a how-to play if there's time
+-shoot lasers at blocks
 
 '''
 
@@ -126,6 +123,49 @@ class Block(object):
 			return False
 		return True
 
+class Bullet(object):
+	def __init__(self,x,y,z,speed,offset):
+		self.x=x
+		self.y=y
+		self.z=z
+		self.rad = 3
+		self.speed=speed
+		self.offset=offset
+
+	def draw(self,canvas,data):
+		pos=[self.x,self.y,self.z]
+		displayBullet(canvas,data,pos,self.rad,0,'blue')
+
+	def move(self):
+		self.z+=self.speed
+
+	def collided(self,other,data):
+		if isinstance(other,Block):
+		
+			#display functions
+			a=[self.x,self.y,self.z]
+			b=[other.x,other.y,other.z]
+
+			if b[2] <=0 or math.isclose(b[2],0.0):
+				b[2]=1
+
+			dXB = (data.vanishPt[0])*(b[2]**-1) + other.width
+
+			b[0]+= data.vanishPt[0]+(other.offset*10*b[2]**-1)
+
+			if b[2] < a[2]:
+				if(a[0] > b[0]+dXB):
+					return False
+
+				if(a[0] < b[0]-dXB):
+					return False
+				return True
+
+	def inBounds(self,data):
+		if self.z > data.vanishPt[2]:
+			return False
+		return True
+
 class Player(object):
 
 	def __init__(self,x,y,z,speed):
@@ -145,17 +185,31 @@ class Player(object):
 		self.isActive=False
 
 	def moveLeft(self):
-		if self.x > -200:
+		if self.x > -220:
 			self.x-=self.speed
 
 	def moveRight(self):
-		if self.x < 240:
+		if self.x < 250:
 			self.x+=self.speed
-		
 
 	def draw(self,data,canvas):
 		pos=[self.x,self.y,self.z]
-		display(canvas,data,pos,self.width,self.depth,0,self.score,self.colorVal)
+		if self.isActive:
+			display(canvas,data,pos,self.width,self.depth,0,self.score,3)
+		else:
+			display(canvas,data,pos,self.width,self.depth,0,self.score,self.colorVal)
+
+	def shoot(self,data):
+		a=[self.x,self.y,self.z]
+		if a[2] <= 0:
+			a[2] = 1
+		screenY = ((data.height*2)/a[2]) + (data.vanishPt[1])
+		dX = (data.vanishPt[0])*(a[2]**-1) + self.width
+		dY = (data.vanishPt[1])*(a[2]**-1) + a[1]
+		a[0]+=data.vanishPt[0]
+		
+		if self.isActive:
+			return Bullet(a[0]+dX//2,screenY+dY//2,a[2],2,data.width//2)
 
 	#checks collisions with a block class, of which each other game element is a subclass 
 	def collided(self,other,data):
@@ -170,12 +224,12 @@ class Player(object):
 			b[2]=1
 
 		dX = (data.vanishPt[0])*(self.z**-1) + self.width
-		dXB = (data.vanishPt[0])*(other.z**-1) + other.width
+		dXB = (data.vanishPt[0])*(b[2]**-1) + other.width
 
 		a[0]+= data.vanishPt[0]
-		b[0]+= data.vanishPt[0]+(other.offset*10*other.z**-1)
+		b[0]+= data.vanishPt[0]+(other.offset*10*b[2]**-1)
 
-		if other.z < self.z:
+		if b[2] < a[2]:
 			if(a[0]-dX > b[0]+dXB):
 				return False
 
@@ -193,13 +247,13 @@ class PowerUp(Block):
 		displaySphere(canvas,data,pos,self.width,self.offset,self.color)
 
 class PowerUpShoot(Block):
-	def __init__(self,x,y,z,rad,offset):
-		super().__init__(x,y,z,rad,rad,offset,False)
+	def __init__(self,z,rad,offset):
+		super().__init__(0,0,z,rad,rad,offset,False)
 		self.color='orange'
-
+	
 	def draw(self,data,canvas):
 		pos=[self.x,self.y,self.z]
-		displaySphere(canvas,data,pos,self.width,self.color)
+		displaySphere(canvas,data,pos,self.width,self.offset,self.color)
 	
 class GameBlock(Block):
 	def __init__(self,x,y,z,rad):
@@ -246,7 +300,8 @@ def display(canvas,data,a,width,depth,offset,score,colorVal):
 	colorScheme = {
 	0:['blue','orange','green','red'],
 	1:['yellow','purple','brown','white'],
-	2:['pink','blue','orange','green']
+	2:['pink','blue','orange','green'],
+	3:['#%02x%02x%02x' % (0,100,0),'#%02x%02x%02x' % ((0,140,0)),'#%02x%02x%02x' % ((0,20,0)),'#%02x%02x%02x' % ((0,255,0))]
 	}
 	aP = copy.copy(a)
 	if a[2] <= 0:
@@ -294,8 +349,13 @@ def displaySphere(canvas,data,a,rad,offset,color):
 
 	canvas.create_oval(a[0]-dR,screenY+dR,a[0]+dR,screenY-dR,fill=color)
 
-def displayTriangle(canvas,data,a,width,depth):
-	pass
+def displayBullet(canvas,data,a,rad,offset,color):
+	if a[2] <= 0:
+		a[2] = 1
+	screenY = ((data.height*2)/a[2]) + (data.vanishPt[1])
+	dR = (data.vanishPt[0])*(a[2]**-1) 
+	posX= (data.vanishPt[0]-a[0])*(a[2]/200) + a[0]
+	canvas.create_oval(posX-dR,screenY-dR,posX+dR,screenY+dR,fill='yellow')
 
 def redrawAll(canvas,data):
 	if data.gameStarted:
@@ -306,6 +366,10 @@ def redrawAll(canvas,data):
 		canvas.create_rectangle(data.width//2-80,0,data.width//2+80,40,fill='white')
 		canvas.create_text(data.width//2-45,15,text="Score: "+str(data.player1.maxScore))
 		canvas.create_text(data.width//2+35,15,text="Protected: "+str(data.player1.protected))
+		if data.player1.isActive:
+			canvas.create_rectangle(data.width//2-40,40,data.width//2+40,100,fill='white')
+			canvas.create_text(data.width//2,70,text="FIRE!",fill='red',font='Arial 20')
+
 
 
 		#road
@@ -319,6 +383,8 @@ def redrawAll(canvas,data):
 		for block in data.blocks:
 			block.draw(data,canvas)
 
+		for bullet in data.bullets:
+			bullet.draw(canvas,data)
 	
 	#if game not yet begun, display beginning pannel 
 	elif not data.gameEnded:
@@ -345,26 +411,46 @@ def manipBlocks(data,dataMin,dataMax):
 	#add a powerUp object every 2300 milliseconds
 	if data.timerCalled % 230 == 0:
 		randOffset= random.randint(dataMin,dataMax)
-		randSize= random.randint(5,10)
+		randSize= random.randint(10,20)
 		data.blocks+=[PowerUp(data.worldZ,randSize,randOffset)]
+
+	if data.timerCalled % 100 == 0:
+		randOffset= random.randint(dataMin,dataMax)
+		randSize= random.randint(10,20)
+		data.blocks+=[PowerUpShoot(data.worldZ,randSize,randOffset)]
 	
 
 	if data.timerCalled % 100 == 0:
 		#score increase based on game speed
-		data.player1.score+= data.scrollSpeed//3
+		data.player1.score+= data.scrollSpeed
 		if data.player1.score > data.player1.maxScore:   #update maxScore 
 			data.player1.maxScore=data.player1.score
-	'''
-		#randX= random.randint(dataMin,dataMax)
-		#randSize= random.randint(10,30)
-		#data.blocks+=[GameBlock(randX,10,randSize,randSize)]
-	'''
+	
+	z=0
+	while z < len(data.bullets):
+		w=0
+		while w < len(data.blocks):
+			bullet = data.bullets[z]
+			block = data.blocks[w]
+			if bullet.collided(block,data):
+				data.player1.score+=1
+				data.blocks.pop(w)
+			w+=1	
+		z+=1
+
 	i=0
 	while i < len(data.blocks):
 		block = data.blocks[i]
 		if not block.inBounds(data):
 			data.blocks.pop(i)
 		i+=1
+
+	j=0
+	while j < len(data.bullets):
+		bullet = data.bullets[j]
+		if not bullet.inBounds(data):
+			data.bullets.pop(j)
+		j+=1
 	
 	k=0
 	while k < len(data.blocks):
@@ -445,8 +531,18 @@ def manipBlocks(data,dataMin,dataMax):
 						data.blocks.pop(k)	
 		k+=1
 
+	shootingT = 80 #tens of milliseconds
+	if data.player1.isActive:
+		if data.timerCalled - data.startShootT > shootingT:
+			data.player1.isActive= False
+		else:
+			data.player1.isActive=True
+
 	for block in data.blocks:
 		block.z-=data.scrollSpeed//3
+
+	for bullet in data.bullets:
+		bullet.move()
 
 def addBlock(data,val):
 	size = int(data.currBeat*20)
@@ -518,7 +614,6 @@ def timerFired(data):
 			#only add a block on intervals of the song tempo (calculated in data.currBeat)
 			if time.time()-startT > data.currBeat:
 				data.rise = int(data.currBeat*200)
-				#print(data.rise)
 				dataMin,dataMax = 30-data.rise,data.rise+30
 				val = ((avgPitch / pitchRange)*(dataMax-dataMin)) + dataMin
 				addBlock(data,val)
@@ -532,14 +627,11 @@ def timerFired(data):
 		stream.stop_stream()
 
 def mousePressed(event,data):
-	print(event.x,event.y)
 	if not data.gameStarted and not data.gameEnded:
 		#check if clicked on Start button 
-		#canvas.create_rectangle(data.width//2-data.width//4,data.height//2+data.height//4,data.width//2+data.width//4,510)
 		if event.x > data.width//2-data.width//4 and event.x < data.width//2+data.width//4:
 			if event.y > data.height//2+data.height//4 and event.y < 510:
 				data.gameStarted =True
-
 
 def keyPressed(event,data):
 	if event.keysym == 'Right':
@@ -547,7 +639,17 @@ def keyPressed(event,data):
 
 	elif event.keysym == 'Left':
 		data.player1.moveLeft()
+
+	elif event.keysym == 'space':
+		if data.player1.shoot(data) != None:
+			data.bullets+=[data.player1.shoot(data)]
+
+	elif event.keysym == 'Down':
+		data.player1.isActive=False
 	
+	if event.char == 'a':
+		data.player1.isActive=True
+		
 	
 #112 run function
 def run(width=500, height=600):
@@ -569,6 +671,7 @@ def run(width=500, height=600):
 	def timerFiredWrapper(canvas, data):
 		timerFired(data)
 		redrawAllWrapper(canvas,data)
+
 		# pause, then call timerFired again
 		canvas.after(data.timerDelay, timerFiredWrapper, canvas, data)
 	# Set up data and call init
@@ -589,6 +692,7 @@ def run(width=500, height=600):
 							mousePressedWrapper(event, canvas, data))
 	root.bind("<Key>", lambda event:
 							keyPressedWrapper(event, canvas, data))
+
 	timerFiredWrapper(canvas, data)
 	# and launch the app
 	root.mainloop()  # blocks until window is closed
@@ -605,5 +709,3 @@ stream.stop_stream()
 stream.close()
 p.terminate()
 
-#Z = int((data.height*2) / (screenY - (data.height // 2)))
-#scalingX = (data.width/2) / math.tan(math.tan(fovX/2))
