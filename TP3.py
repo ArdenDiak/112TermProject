@@ -604,7 +604,10 @@ def timerFired(data):
 			#only add a block on intervals of the song tempo (calculated in data.currBeat)
 			if time.time()-startT > data.currBeat:
 				data.rise = int(data.currBeat*200)
-				dataMin,dataMax = 30-data.rise,data.rise+30
+				if 30-data.rise > -50:
+					dataMin,dataMax=-100,100
+				else:
+					dataMin,dataMax=30-data.rise,data.rise+30
 				val = ((avgPitch / pitchRange)*(dataMax-dataMin)) + dataMin
 				addBlock(data,val)
 				#update scrollSpeed depending on pitch
